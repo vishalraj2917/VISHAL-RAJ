@@ -1,0 +1,18 @@
+{
+    "model": "Gradient Boosting",
+    "validation_metrics": {
+        "mae": 0.4387,
+        "mse": 1.3857,
+        "rmse": 1.1772,
+        "r2": 0.9937,
+        "mape": 1.3421
+    },
+    "test_metrics": {
+        "mae": 0.4768,
+        "mse": 1.904,
+        "rmse": 1.3798,
+        "r2": 0.9914,
+        "mape": 1.8897
+    },
+    "evaluated_at": "2026-09-01T04:05:56.489064Z"
+}
