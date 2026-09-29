@@ -9,15 +9,19 @@ import { PollutantBarChart, EnvironmentalGaugeChart } from './components/Dashboa
 import { AnalyticsSummaryCards } from './components/AnalyticsSummaryCards';
 import { HistoricalAnalyticsCharts } from './components/HistoricalAnalyticsCharts';
 import { AIInsightsPanel } from './components/AIInsightsPanel';
+import { AIForecastPanel } from './components/AIForecastPanel';
+import { OutdoorHealthCalculator } from './components/OutdoorHealthCalculator';
 import { PredictionHistoryTable } from './components/PredictionHistoryTable';
-import { ManualPredictionForm } from './components/ManualPredictionForm';
 import { AIChatbot } from './components/AIChatbot';
 import { AIReportGenerator } from './components/AIReportGenerator';
 import { AIHealthAdvisor } from './components/AIHealthAdvisor';
+import { AirQualityMap } from './components/AirQualityMap';
 import { LoginModal } from './components/LoginModal';
 import { RegisterModal } from './components/RegisterModal';
 import { ProfileModal } from './components/ProfileModal';
 import { LoadingState, ErrorState, EmptyState } from './components/StatusStates';
+import { reverseGeocode, PRESET_FALLBACKS } from './utils/geocoding';
+
 import {
   getLivePrediction,
   checkHealth,
@@ -35,9 +39,10 @@ function DashboardContent() {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // Coordinates state
+  // Active Location state
   const [latitude, setLatitude] = useState('12.9716');
   const [longitude, setLongitude] = useState('77.5946');
+  const [locationName, setLocationName] = useState('Bengaluru, Karnataka, India');
 
   // Application telemetry & model states
   const [isLoading, setIsLoading] = useState(false);
@@ -100,17 +105,13 @@ function DashboardContent() {
     return () => clearInterval(interval);
   }, [fetchAnalyticsAndInsights, timeRange]);
 
-  // Fetch live prediction logic
-  const handleFetchLive = useCallback(async (latVal = latitude, lonVal = longitude) => {
+  // Fetch live prediction logic for chosen location
+  const handleFetchLive = useCallback(async (latVal = latitude, lonVal = longitude, nameVal = locationName) => {
     const latNum = parseFloat(latVal);
     const lonNum = parseFloat(lonVal);
 
-    if (isNaN(latNum) || latNum < -90 || latNum > 90) {
-      setErrorMessage('Please enter a valid latitude between -90.0 and 90.0 degrees.');
-      return;
-    }
-    if (isNaN(lonNum) || lonNum < -180 || lonNum > 180) {
-      setErrorMessage('Please enter a valid longitude between -180.0 and 180.0 degrees.');
+    if (isNaN(latNum) || isNaN(lonNum)) {
+      setErrorMessage('Invalid location coordinates. Please search for a valid city or address.');
       return;
     }
 
@@ -120,11 +121,19 @@ function DashboardContent() {
     try {
       const response = await getLivePrediction(latNum, lonNum);
       if (response && response.success) {
-        setData(response);
-        // Refresh analytics and AI insights after new live inference
+        // Attach user-friendly location name to data payload
+        const enrichedData = {
+          ...response,
+          locationName: nameVal || response.city || 'Searched Location',
+        };
+        setData(enrichedData);
+        if (nameVal) setLocationName(nameVal);
+        setLatitude(latVal.toString());
+        setLongitude(lonVal.toString());
+
         fetchAnalyticsAndInsights(timeRange);
       } else {
-        throw new Error('API returned an unsuccessful payload structure.');
+        throw new Error('Environmental API returned an unsuccessful response structure.');
       }
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -134,17 +143,25 @@ function DashboardContent() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [latitude, longitude, fetchAnalyticsAndInsights, timeRange]);
+  }, [latitude, longitude, locationName, fetchAnalyticsAndInsights, timeRange]);
 
   // Initial load
   useEffect(() => {
-    handleFetchLive('12.9716', '77.5946');
+    handleFetchLive('12.9716', '77.5946', 'Bengaluru, Karnataka, India');
   }, []);
+
+  // Handle direct location selection from search or quick chips
+  const handleSelectLocation = (lat, lon, name) => {
+    setLatitude(lat.toString());
+    setLongitude(lon.toString());
+    setLocationName(name);
+    handleFetchLive(lat.toString(), lon.toString(), name);
+  };
 
   // Refresh handler
   const handleRefresh = () => {
     setIsRefreshing(true);
-    handleFetchLive(latitude, longitude);
+    handleFetchLive(latitude, longitude, locationName);
     fetchAnalyticsAndInsights(timeRange);
   };
 
@@ -169,16 +186,20 @@ function DashboardContent() {
 
     setIsLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const lat = pos.coords.latitude.toFixed(4);
         const lon = pos.coords.longitude.toFixed(4);
-        setLatitude(lat);
-        setLongitude(lon);
-        handleFetchLive(lat, lon);
+        let placeName = `Current Device Location (${lat}, ${lon})`;
+        try {
+          placeName = await reverseGeocode(lat, lon);
+        } catch (e) {
+          console.warn('Reverse geocode error:', e);
+        }
+        handleSelectLocation(lat, lon, placeName);
       },
       (err) => {
         setIsLoading(false);
-        setErrorMessage('Unable to retrieve device GPS coordinates. Please input coordinates manually.');
+        setErrorMessage('Unable to retrieve device GPS location. Please search for a city or address manually.');
       }
     );
   };
@@ -196,11 +217,8 @@ function DashboardContent() {
       />
 
       <LocationSelector
-        latitude={latitude}
-        longitude={longitude}
-        onLatitudeChange={setLatitude}
-        onLongitudeChange={setLongitude}
-        onFetchLive={() => handleFetchLive(latitude, longitude)}
+        selectedLocationName={locationName}
+        onSelectLocation={handleSelectLocation}
         isLoading={isLoading}
         onUseCurrentLocation={handleUseCurrentLocation}
       />
@@ -215,12 +233,31 @@ function DashboardContent() {
         isRefreshing={isRefreshing}
       />
 
+      {/* Interactive Geospatial Air Quality Map */}
+      <AirQualityMap
+        latitude={latitude}
+        longitude={longitude}
+        locationName={locationName}
+        prediction={data?.prediction}
+        airQuality={data?.air_quality}
+        cityPresets={PRESET_FALLBACKS}
+        onLocationSelect={(newLat, newLon, newName) => {
+          handleSelectLocation(newLat, newLon, newName);
+        }}
+      />
+
+      {/* 7-Day AI Air Quality & Weather Forecast */}
+      <AIForecastPanel environmentalData={data} locationName={locationName} />
+
+      {/* Outdoor Health & Mask Recommendation Calculator */}
+      <OutdoorHealthCalculator environmentalData={data} locationName={locationName} />
+
       {isLoading && <LoadingState />}
 
       {!isLoading && errorMessage && (
         <ErrorState
           message={errorMessage}
-          onRetry={() => handleFetchLive(latitude, longitude)}
+          onRetry={() => handleFetchLive(latitude, longitude, locationName)}
         />
       )}
 
@@ -234,6 +271,7 @@ function DashboardContent() {
               prediction={data.prediction}
               model={data.model}
               observedAt={data.observed_at}
+              locationName={locationName}
             />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -270,55 +308,39 @@ function DashboardContent() {
             <AIReportGenerator environmentalContext={data} />
             <AIHealthAdvisor environmentalContext={data} />
           </div>
-
-          {/* Manual Parameter Simulation Form */}
-          <ManualPredictionForm />
-
-          {/* Dashboard Meta Footer */}
-          <footer className="dashboard-footer" style={{ marginTop: '2rem' }}>
-            <div>
-              Observation Timestamp: <strong>{data.observed_at || 'Live Stream'}</strong> | Target: <strong>{data.location?.latitude}°N, {data.location?.longitude}°E</strong>
-            </div>
-            <div>
-              System Version: 1.0.0 | Connected API: <code>/api/insights</code> & <code>/api/predict/live</code>
-            </div>
-          </footer>
         </>
       )}
 
       {/* Auth Modals */}
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onSwitchToRegister={() => {
-          setIsLoginOpen(false);
-          setIsRegisterOpen(true);
-        }}
-      />
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
+      <RegisterModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} />
+      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
 
-      <RegisterModal
-        isOpen={isRegisterOpen}
-        onClose={() => setIsRegisterOpen(false)}
-        onSwitchToLogin={() => {
-          setIsRegisterOpen(false);
-          setIsLoginOpen(true);
-        }}
-      />
-
-      <ProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-      />
+      <footer style={{
+        marginTop: '4rem',
+        padding: '1.5rem 0',
+        borderTop: '1px solid var(--border-color)',
+        textAlign: 'center',
+        color: 'var(--text-muted)',
+        fontSize: '0.85rem'
+      }}>
+        <div>
+          AI Air Quality Prediction Engine &copy; {new Date().getFullYear()} &bull; Blue & White Environmental Intelligence Platform
+        </div>
+        {data && (
+          <div style={{ fontSize: '0.78rem', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
+            Observation Timestamp: <strong>{data.observed_at || 'Live Stream'}</strong> | Location: <strong>{locationName || data.city || 'Bengaluru'}</strong>
+          </div>
+        )}
+      </footer>
     </div>
   );
 }
 
-export function App() {
+export default function App() {
   return (
     <AuthProvider>
       <DashboardContent />
     </AuthProvider>
   );
 }
-
-export default App;

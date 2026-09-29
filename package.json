@@ -1,0 +1,14 @@
+{
+  "name": "ai-air-quality-prediction",
+  "version": "1.0.0",
+  "description": "AI Air Quality Prediction System",
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && .venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    "start:frontend": "cd frontend && npm run dev",
+    "dev": "npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

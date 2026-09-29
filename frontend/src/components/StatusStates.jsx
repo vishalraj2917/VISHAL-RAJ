@@ -6,9 +6,9 @@ export const LoadingState = () => (
     <div className="state-icon loading">
       <Loader2 size={36} />
     </div>
-    <div className="state-title">Fetching Real-time Environmental Data</div>
+    <div className="state-title">Fetching Live Air Quality Data</div>
     <div className="state-description">
-      Acquiring live meteorological parameters & pollutant telemetry, engineering 21 ML features, and running neural gradient boosting inference...
+      Acquiring real-time meteorological parameters & pollutant telemetry, engineering ML features, and running neural prediction inference...
     </div>
   </div>
 );
@@ -20,7 +20,7 @@ export const ErrorState = ({ message, onRetry }) => (
     </div>
     <div className="state-title">Environmental Data Unavailable</div>
     <div className="state-description">
-      {message || 'Unable to retrieve live environmental observations for the specified coordinates. Please verify coordinates and try again.'}
+      {message || 'Unable to retrieve live environmental observations for the selected location. Please search for a valid city or address and try again.'}
     </div>
     {onRetry && (
       <button className="btn-primary" onClick={onRetry} style={{ marginTop: '0.75rem' }}>
@@ -35,9 +35,9 @@ export const EmptyState = () => (
     <div className="state-icon empty">
       <Compass size={36} />
     </div>
-    <div className="state-title">Select a Location to Begin</div>
+    <div className="state-title">Search a Location to View Air Quality</div>
     <div className="state-description">
-      Enter target geographic coordinates (Latitude / Longitude) or click any of the preset cities above to generate a real-time AI Air Quality Index prediction.
+      Search any city, address, or landmark above or click any of the preset cities to generate a real-time AI Air Quality Index prediction.
     </div>
   </div>
 );
